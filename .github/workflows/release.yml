@@ -1,0 +1,138 @@
+# =============================================================================
+# NeoTcg — Automated Release on Tag Push
+#
+# Activa: al hacer push de un tag como v1.2.0
+# Crea: un GitHub Release draft con los assets adjuntos
+#
+# Requisito: subir los ZIPs como artifacts en este workflow
+#            (ej: desde un job anterior de Godot export)
+# =============================================================================
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      # --- Checkout ---
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- Descargar artifacts de builds (si existen) ---
+      # Si tienes un workflow separado que exporta desde Godot y sube
+      # artifacts, descomenta esto para descargarlos:
+      #
+      # - name: Download build artifacts
+      #   uses: dawidd6/action-download-artifact@v3
+      #   with:
+      #     workflow: godot-export.yml
+      #     run_id: ${{ github.event.workflow_run.id }}
+      #     name: game-builds
+      #     path: builds/
+
+      # --- Fallback: buscar ZIPs en el repo o en builds/ ---
+      - name: Find build files
+        id: find_builds
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+          WIN_ZIP="neo-tcg-${VERSION}-win.zip"
+          MAC_ZIP="neo-tcg-${VERSION}-mac.zip"
+
+          FOUND_ALL=true
+
+          # Buscar en el repo y en builds/
+          for f in "${WIN_ZIP}" "builds/${WIN_ZIP}" "dist/${WIN_ZIP}"; do
+            if [ -f "$f" ]; then
+              echo "win_path=$f" >> $GITHUB_OUTPUT
+              FOUND_ALL=true
+              break
+            fi
+          done
+
+          for f in "${MAC_ZIP}" "builds/${MAC_ZIP}" "dist/${MAC_ZIP}"; do
+            if [ -f "$f" ]; then
+              echo "mac_path=$f" >> $GITHUB_OUTPUT
+              break
+            fi
+          done
+
+          echo "found_all=${FOUND_ALL}" >> $GITHUB_OUTPUT
+
+      # --- Calcular SHA256 y generar version.json ---
+      - name: Generate version.json
+        id: gen_version
+        run: |
+          VERSION="${{ steps.find_builds.outputs.version }}"
+          WIN_PATH="${{ steps.find_builds.outputs.win_path }}"
+          MAC_PATH="${{ steps.find_builds.outputs.mac_path }}"
+
+          WIN_SHA=""
+          MAC_SHA=""
+
+          if [ -n "$WIN_PATH" ] && [ -f "$WIN_PATH" ]; then
+            WIN_SHA=$(sha256sum "$WIN_PATH" | awk '{print $1}')
+            echo "win_sha256=${WIN_SHA}" >> $GITHUB_OUTPUT
+            echo "✅ win SHA256: ${WIN_SHA:0:16}..."
+          fi
+
+          if [ -n "$MAC_PATH" ] && [ -f "$MAC_PATH" ]; then
+            MAC_SHA=$(sha256sum "$MAC_PATH" | awk '{print $1}')
+            echo "mac_sha256=${MAC_SHA}" >> $GITHUB_OUTPUT
+            echo "✅ mac SHA256: ${MAC_SHA:0:16}..."
+          fi
+
+          # Generar version.json con los hashes disponibles
+          cat > version.json <<ENDJSON
+          {
+            "version": "${VERSION}",
+            "builds": {
+              "windows": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/neo-tcg-${VERSION}-win.zip",
+                "sha256": "${WIN_SHA}"
+              },
+              "macos": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/neo-tcg-${VERSION}-mac.zip",
+                "sha256": "${MAC_SHA}"
+              }
+            }
+          }
+          ENDJSON
+
+          echo "✅ version.json generado"
+
+      # --- Crear el Release ---
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "NeoTcg ${{ github.ref_name }}"
+          generate_release_notes: true
+          draft: true
+          files: |
+            ${{ steps.find_builds.outputs.win_path }}
+            ${{ steps.find_builds.outputs.mac_path }}
+            version.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Resumen ---
+      - name: Release Summary
+        run: |
+          echo "## ✅ Release ${{ github.ref_name }} creado" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Draft:** Sí (revísalo y publícalo manualmente)" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://github.com/${{ github.repository }}/releases/edit/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Recuerda revisar el version.json adjunto antes de publicar." >> $GITHUB_STEP_SUMMARY

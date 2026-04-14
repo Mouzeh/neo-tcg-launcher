@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "builds": {
+    "windows": {
+      "url": "https://github.com/TU_USUARIO/neo-tcg-builds/releases/download/v1.0.0/neo-tcg-1.0.0-win.zip",
+      "sha256": "abc123..."
+    },
+    "macos": {
+      "url": "https://github.com/TU_USUARIO/neo-tcg-builds/releases/download/v1.0.0/neo-tcg-1.0.0-mac.zip",
+      "sha256": "def456..."
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# NeoTcg Launcher — Dependencias esenciales
+# Sin appdirs. Rutas nativas con pathlib.
+
+customtkinter>=5.2.0
+requests>=2.31.0
+psutil>=5.9.0
+
+# Compilación (solo necesario para build)
+pyinstaller>=6.0
