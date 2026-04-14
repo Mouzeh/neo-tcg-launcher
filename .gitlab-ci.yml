@@ -1,0 +1,19 @@
+stages:
+  - build
+
+build-windows:
+  stage: build
+  image: windows:latest
+  tags:
+    - saas-windows-medium-amd64
+  before_script:
+    - python -m venv venv
+    - .\venv\Scripts\activate
+    - python -m pip install --upgrade pip
+  script:
+    - pip install customtkinter requests psutil pyinstaller
+    - pyinstaller --onefile --windowed --name NeoTcgLauncher launcher_gui.py
+  artifacts:
+    paths:
+      - dist/NeoTcgLauncher.exe
+    expire_in: 7 days
